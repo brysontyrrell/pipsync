@@ -69,4 +69,4 @@ By default, _Pipsync_ will not include `dev-packages` from your `Pipfile` when s
 
 ### Use With Editors and IDEs
 
-PyCharm FileWatcher instructions coming...
+* [Pycharm (macOS) FileWatcher](docs/pycharm.md)
