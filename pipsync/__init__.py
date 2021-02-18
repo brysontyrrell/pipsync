@@ -3,6 +3,8 @@ import argparse
 import json
 import logging
 import os
+import subprocess
+from pathlib import Path
 
 import toml
 
@@ -18,6 +20,13 @@ __description__ = "Sync requirements.txt files with a project Pipfile."
 logger = logging.getLogger(__name__)
 
 
+def detect_root():
+    return Path(subprocess.run(
+        ('pipenv', '--where'),
+        capture_output=True, check=True, text=True
+    ).stdout.rstrip('\n'))
+
+
 def configure_logger(verbose=False):
     """Configure the logger. For use when invoked as a CLI tool."""
     log_level = logging.DEBUG if verbose else logging.INFO
@@ -26,13 +35,15 @@ def configure_logger(verbose=False):
 
 def arguments():
     parser = argparse.ArgumentParser(prog="pipsync", description=__description__)
-    parser.add_argument("PATH", help="Project root / Pipfile location")
+    parser.add_argument("PATH", nargs="?", type=Path,
+                        help="Project root / Pipfile location")
 
     parser.add_argument(
         "-x",
         "--exclude",
         action="append",
         default=[],
+        type=Path,
         help="Exclude top level directories from requirements.txt file search",
     )
 
@@ -57,33 +68,29 @@ def arguments():
 
     parsed_args = parser.parse_args()
 
-    if parsed_args.PATH.endswith("Pipfile.lock"):
-        parsed_args.DIR = os.path.dirname(parsed_args.PATH)
-    else:
-        if not os.path.isfile(os.path.join(parsed_args.PATH, "Pipfile.lock")):
+    if parsed_args.PATH:
+        path = parsed_args.PATH.expanduser()
+        if path.stem == 'Pipfile':
+            path = path.parent
+        parsed_args.PATH = path
+        if not is_readable_file(path / "Pipfile.lock"):
             logger.info("Pipfile.lock not found at given path")
             raise SystemExit(1)
-        else:
-            parsed_args.DIR = parsed_args.PATH
 
-    if parsed_args.exclude:
-        parsed_args.exclude = [
-            os.path.join(parsed_args.DIR, d) for d in parsed_args.exclude
-        ]
 
     return parsed_args
 
 
-def is_readable_file(path: str):
+def is_readable_file(path: Path):
     return os.path.isfile(path) and os.access(path, os.R_OK)
 
 
-def find_dependency_files(root_dir: str, exclude: list):
+def find_dependency_files(root_dir: Path, exclude: list):
     name = "requirements.direct.txt"
     return [*recursive_search(root_dir, name, exclude)]
 
 
-def recursive_search(root_dir: str, name: str, exclude: list):
+def recursive_search(root_dir: Path, name: str, exclude: list):
     for root, dirs, _ in os.walk(root_dir):
         dirs[:] = [
             d
@@ -172,12 +179,19 @@ def main():
     args = arguments()
     configure_logger(args.verbose)
 
-    dependency_files = find_dependency_files(args.DIR, args.exclude)
+    if args.PATH:
+        root = args.PATH
+        os.chdir(args.PATH)
+    else:
+        root = detect_root()
+    excludes = [os.path.join(root, dir) for dir in args.exclude]
+
+    dependency_files = find_dependency_files(root, excludes)
     if not dependency_files:
         logger.warning("No requirements.direct.txt files found.")
         raise SystemExit
 
-    pipfile_packages = get_pipfile_packages(args.DIR, args.dev)
+    pipfile_packages = get_pipfile_packages(root, args.dev)
 
     synced_count = 0
     skipped_count = 0
