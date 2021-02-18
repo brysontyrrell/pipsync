@@ -104,8 +104,12 @@ def get_pipfile_packages(base_dir, include_dev=False):
 
         if not version:
             git_url = pipfile_lock["default"][package].get("git")
+            git_ref = pipfile_lock["default"][package].get("ref")
+            is_editable = pipfile_lock["default"][package].get("editable")
             if git_url:
-                return {"pip": f"git+{git_url}#egg={package}"}
+                prefix = '-e ' if is_editable else ''
+                ref = f'@{git_ref}' if git_ref else ''
+                return {"pip": f"{prefix}git+{git_url}{ref}#egg={package}"}
         else:
             return {"pip": f"{package}{version}"}
 
