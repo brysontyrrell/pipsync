@@ -27,6 +27,15 @@ def detect_root():
     ).stdout.rstrip('\n'))
 
 
+def get_dependency_graph():
+    return json.loads(
+        subprocess.run(
+            ('pipenv', 'graph', '--json'),
+            capture_output=True, check=True, text=True
+        ).stdout
+    )
+
+
 def configure_logger(verbose=False):
     """Configure the logger. For use when invoked as a CLI tool."""
     log_level = logging.DEBUG if verbose else logging.INFO
