@@ -74,20 +74,25 @@ def arguments():
     return parsed_args
 
 
-def find_requirements_files(root_dir: str, exclude: list):
-    file_list = list()
+def is_readable_file(path: str):
+    return os.path.isfile(path) and os.access(path, os.R_OK)
 
-    for root, dirs, files in os.walk(root_dir):
+
+def find_dependency_files(root_dir: str, exclude: list):
+    name = "requirements.direct.txt"
+    return [*recursive_search(root_dir, name, exclude)]
+
+
+def recursive_search(root_dir: str, name: str, exclude: list):
+    for root, dirs, _ in os.walk(root_dir):
         dirs[:] = [
             d
             for d in dirs
             if os.path.join(root, d) not in exclude and not d.startswith(".")
         ]
-        for file in files:
-            if file.lower() == "requirements.txt":
-                file_list.append(os.path.join(root, file))
-
-    return file_list
+        searched_file = os.path.join(root, name)
+        if is_readable_file(searched_file):
+            yield searched_file
 
 
 def get_pipfile_packages(base_dir, include_dev=False):
@@ -157,7 +162,8 @@ def generate_requirements(pipfile_packages, requirements_packages, force=False):
     return content
 
 
-def write_requirements(content, path):
+def write_requirements(content, directory):
+    path = os.path.join(directory, "requirements.txt")
     with open(path, "w") as f:
         f.write(content)
 
@@ -166,21 +172,21 @@ def main():
     args = arguments()
     configure_logger(args.verbose)
 
-    requirements_files = find_requirements_files(args.DIR, args.exclude)
-    if not requirements_files:
-        logger.warning("No requirements.txt files found.")
+    dependency_files = find_dependency_files(args.DIR, args.exclude)
+    if not dependency_files:
+        logger.warning("No requirements.direct.txt files found.")
         raise SystemExit
 
     pipfile_packages = get_pipfile_packages(args.DIR, args.dev)
 
     synced_count = 0
     skipped_count = 0
-    for file in requirements_files:
+    for file in dependency_files:
         if req_content := generate_requirements(
             pipfile_packages, parse_requirements(file), args.force
         ):
             logger.info(f"Syncing file: {file}")
-            write_requirements(req_content, file)
+            write_requirements(req_content, os.path.dirname(file))
             synced_count += 1
         else:
             logger.debug(f"Empty requirements file: {file}")
