@@ -25,7 +25,7 @@ def get_readme():
 
 about = get_dunders()
 
-requirements = ["toml>=0.10.1"]
+requirements = ["toml>=0.10.1", "pipenv>=2020.11.15"]
 
 setup(
     name=about["__title__"],
